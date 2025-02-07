@@ -1,17 +1,53 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{self, DeriveInput};
+use std::fs;
+use syn::{self, parse_file, DeriveInput, File, Item, ItemStruct, Data, DataStruct};
+
+const MAIN_FILE: &str = "src/main.rs";
+
+
+fn item_struct_to_derive_input(item_struct: ItemStruct) -> DeriveInput {
+    DeriveInput {
+        attrs: item_struct.attrs,       // Preserve attributes
+        vis: item_struct.vis,           // Preserve visibility (pub/private)
+        ident: item_struct.ident,       // Struct name
+        generics: item_struct.generics, // Generic parameters
+        data: Data::Struct(DataStruct {
+            struct_token: item_struct.struct_token,
+            fields: item_struct.fields, // Fields of the struct
+            semi_token: item_struct.semi_token,
+        }),
+    }
+}
+
+fn load_global_ast(parent_struct_name: String) -> Option<DeriveInput> {
+    let code = fs::read_to_string(MAIN_FILE).expect("Failed to read file");
+
+    // Parse to ast
+    let ast: File = parse_file(&code).expect("Failed to parse file");
+
+    for item in ast.items {
+        if let Item::Struct(parsed_struct) = item {
+            if parsed_struct.ident.to_string() == parent_struct_name {
+                return Some(item_struct_to_derive_input(parsed_struct.clone()));
+            }
+        }
+    }
+
+    return None;
+}
 
 #[proc_macro_attribute]
 pub fn inherit(parent_struct_tokens: TokenStream, child_struct: TokenStream) -> TokenStream {
-    let parent_struct_ast = syn::parse::<DeriveInput>(parent_struct_tokens).unwrap();
- 
-    // Check the coming child_struct is a struct only
-    if let Ok(child_ast) = syn::parse::<syn::DeriveInput>(child_struct) {
-        // Check the coming parent_struct is a struct only
-        return make_inheritance(&parent_struct_ast, &child_ast);
+    if let Some(parent_struct_ast) = load_global_ast(parent_struct_tokens.to_string()) {
+        // Check the coming child_struct is a struct only
+        if let Ok(child_ast) = syn::parse::<syn::DeriveInput>(child_struct) {
+            // Check the coming parent_struct is a struct only
+            return make_inheritance(&parent_struct_ast, &child_ast);
+        }
+        panic!("macro can be applied only to struct");
     }
-    panic!("macro can be applied only to struct");
+    panic!("Parent struct AST not found in src/main");
 }
 
 fn make_inheritance(parent_ast: &syn::DeriveInput, child_ast: &syn::DeriveInput) -> TokenStream {

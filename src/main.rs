@@ -5,16 +5,12 @@ struct Shape {
     y: u32,
 }
 
-#[inherit(struct Sh {
-    x: u32,
-    y: u32
-})]
+#[inherit(Shape)]
 struct Rectangle {
-    x: u32
+    z: u32,
 }
 
 fn main() {
-    let x = Rectangle { x: 1, y: 12 };
-    //  println!("Circle: {} {} {}", x.x, x.y, x.z);
-    println!("Struct: {}", x.x);
+    let x = Rectangle { x: 1, y: 12, z: 35 };
+    println!("{:#?}", x);
 }
