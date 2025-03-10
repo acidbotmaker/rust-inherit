@@ -1,9 +1,7 @@
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
 use std::{collections::HashMap, fs};
-use syn::{self, parse_file, parse_macro_input, parse_str, Data, DataStruct, DeriveInput, File, Item, ItemStruct};
-use lazy_static::lazy_static;
-use std::sync::Mutex;
+use syn::{self, parse_file, parse_str, Data, DataStruct, DeriveInput, File, Item, ItemStruct};
 
 const MAIN_FILE: &str = "src/main.rs";
 
