@@ -9,18 +9,28 @@ struct _3DShape {
     z: u32
 }
 
-#[inherit(Shape, _3DShape)]
-struct Rectangle;
+#[inherit(Shape)]
+#[derive(Debug)]
+struct Rectangle{
+    width: u32,
+    height: u32,
+}
 
-// #[inherit(Rectangle)]
-// struct Square{
-//     w: f32
-// }
+#[inherit(Shape)]
+struct Square {
+    width: u32,
+}
+
+#[inherit(Rectangle, _3DShape)] // TODO: Multi-level inheritance is pending
+struct Parallelogram {
+    angle: u32
+}
+
 
 fn main() {
-    let x = Rectangle { x: 1, y: 12, z: 35 };
+    let rect = Rectangle { x: 0, y: 0, width: 35, height: 45 };
+    let sqr = Square {x: 0, y: 0, width: 35};
+    let par = Parallelogram { x: 0, y: 0, width: 35, height: 45, angle: 45, z: 45 };
 
-    // let square = Square {z: 23, w: 32.0};
-    // println!("{:#?} {:#?}", x, square);
-    println!("{:#?}", x);
+    println!("{:#?} {:#?} {:#?}", rect, sqr, par);
 }
