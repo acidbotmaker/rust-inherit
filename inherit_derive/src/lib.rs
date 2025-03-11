@@ -97,6 +97,8 @@ fn load_all_struct_hashmap() -> HashMap<String, StructHashMapItem> {
 fn make_inheritance(parent_struct_names: &Vec<String>, child_ast: &DeriveInput, global_struct_hashmap: &HashMap<String, StructHashMapItem>) -> DeriveInput {
     let child_struct_name = &child_ast.ident;
 
+    let mut impls_to_implement: Vec<ImplItem> = Vec::new();
+
     let mut parent_structs = Vec::new();
     for parent_struct_name in parent_struct_names {
         if let Some(parent_struct) = global_struct_hashmap.get(parent_struct_name) {
@@ -105,6 +107,32 @@ fn make_inheritance(parent_struct_names: &Vec<String>, child_ast: &DeriveInput, 
             if parent_struct.parents.len() > 0 {
                 let ss = make_inheritance(&parent_struct.parents, &parent_struct.code, global_struct_hashmap);
                 parent_structs.push(ss);
+            }
+
+            for impl_item in &parent_struct.impl_items {
+                // Get item name
+                let item_name = get_impl_s_item_name(impl_item);
+
+                // Check if impl item already exists
+                let mut impl_item_index = 0;
+                let mut impl_item_exists = false;
+
+                for exiting_impl_item in &impls_to_implement {
+                    let existimg_impl_item_name = get_impl_s_item_name(exiting_impl_item);
+
+                    if existimg_impl_item_name == item_name {
+                        impl_item_exists = true;
+                        break;
+                    }
+                    impl_item_index += 1;
+                }
+
+                // Then add it
+                if impl_item_exists {
+                    impls_to_implement[impl_item_index] = impl_item.clone();
+                }else{
+                    impls_to_implement.push(impl_item.clone());
+                }
             }
 
             parent_structs.push(parent_struct.code.clone());
