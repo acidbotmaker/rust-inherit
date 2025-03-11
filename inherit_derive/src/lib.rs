@@ -64,18 +64,16 @@ fn load_all_struct_hashmap() -> HashMap<String, StructHashMapItem> {
     return struct_hashmap;
 }
 
-fn make_parent_inhert(parent_struct_names: &Vec<String>, child_ast: &DeriveInput) -> DeriveInput {
+fn make_inheritance(parent_struct_names: &Vec<String>, child_ast: &DeriveInput, global_struct_hashmap: &HashMap<String, StructHashMapItem>) -> DeriveInput {
     let child_struct_name = &child_ast.ident;
 
-    // Load parent structs from hashmap
-    let global_struct_hashmap = load_all_struct_hashmap();
     let mut parent_structs = Vec::new();
     for parent_struct_name in parent_struct_names {
         if let Some(parent_struct) = global_struct_hashmap.get(parent_struct_name) {
 
             // Check if parent has grandparent
             if parent_struct.parents.len() > 0 {
-                let ss = make_parent_inhert(&parent_struct.parents, &parent_struct.code);
+                let ss = make_inheritance(&parent_struct.parents, &parent_struct.code, global_struct_hashmap);
                 parent_structs.push(ss);
             }
 
@@ -161,106 +159,27 @@ fn make_parent_inhert(parent_struct_names: &Vec<String>, child_ast: &DeriveInput
 
 #[proc_macro_attribute]
 pub fn inherit(parent_struct_tokens: TokenStream, child_struct: TokenStream) -> TokenStream {
-    let global_struct_hashmap = load_all_struct_hashmap();
-
-    let parent_struct_names = parent_struct_tokens.to_string().split(',').map(|s| s.trim().to_string()).collect::<Vec<_>>();
-    
-    let mut parent_structs = Vec::new();
-
-    // Load parent structs
-    for parent_struct_name in parent_struct_names {
-        if let Some(parent_struct) = global_struct_hashmap.get(&parent_struct_name) {
-            let ss = make_parent_inhert(&parent_struct.parents, &parent_struct.code);
-            parent_structs.push(ss);
-        }
-    }
-
-    // load_global_ast(parent_struct_tokens.to_string());
-    if parent_structs.len() == 0 {
-        panic!(
-            "Parent(s) {} not found in {}",
-            parent_struct_tokens.to_string(),
-            MAIN_FILE
-        );
-    }
-
     // Check the coming child_struct is a struct only
     if let Ok(child_ast) = syn::parse::<syn::DeriveInput>(child_struct) {
-        // Check the coming parent_struct is a struct only
-        return make_inheritance(&parent_structs, &child_ast);
-    }
-    panic!("macro can be applied only to struct");
-}
+        // Load global struct hashmap
+        let global_struct_hashmap = load_all_struct_hashmap();
 
-fn make_inheritance(parent_asts: &Vec<syn::DeriveInput>, child_ast: &syn::DeriveInput) -> TokenStream {
-    let child_struct_name = &child_ast.ident;
-
-    match &child_ast.data {
-        syn::Data::Struct(child) => {
-            
-            let mut new_struct_fields: Vec<syn::Field> = Vec::new();
-            
-            for parent_ast in parent_asts{
-                match &parent_ast.data {
-                    syn::Data::Struct(parent) => {
-                        // Loop through parent fields
-                        for field in parent.fields.iter() {
-                            // Check if field already exists in new_struct_fields
-                            let mut field_index = 0;
-                            let mut change_field = false;
-                            for new_field in new_struct_fields.iter() {
-                                if field.ident == new_field.ident {
-                                    change_field = true;
-                                    break;
-                                }
-                                field_index += 1;
-                            }
-    
-                            // Remove it
-                            if change_field {
-                                new_struct_fields.remove(field_index);
-                            }
-    
-                            // Then add parent's
-                            new_struct_fields.push(field.clone());
-                        }
-                    }
-                    _ => panic!("Not implemented inheritance")
-                }
-            }
-           
-            // Loop through child fields
-            for field in child.fields.iter() {
-                // Check if field already exists in new_struct_fields
-                let mut field_index = 0;
-                let mut change_field = false;
-                for new_field in new_struct_fields.iter() {
-                    if field.ident == new_field.ident {
-                        change_field = true;
-                        break;
-                    }
-                    field_index += 1;
-                }
-
-                // Remove it
-                if change_field {
-                    new_struct_fields.remove(field_index);
-                }
-
-                // Then add parent's
-                new_struct_fields.push(field.clone());
-            }
-
-            let gen = quote! {
-                #[derive(Debug)]
-                struct #child_struct_name {
-                    #(#new_struct_fields),*
-                }
-            };
-            return gen.into();
+        // Check if parent struct names are given
+        let parent_struct_names = parent_struct_tokens.to_string().split(',').map(|s| s.trim().to_string()).collect::<Vec<_>>();
+        if parent_struct_names.len() == 0 {
+            panic!("At least one parent struct must be specified");
         }
-        _ => {
-            panic!("Method not implemented");
+
+        for parent_struct_name in &parent_struct_names {
+            if !global_struct_hashmap.contains_key(parent_struct_name) {
+                panic!("Parent struct {} not found in {}", parent_struct_name, MAIN_FILE);
+            }
         }
+
+        let inherited_child_struct = make_inheritance(&parent_struct_names, &child_ast, &global_struct_hashmap);
+
+        // Convert deriveInput to TokenStream
+        return inherited_child_struct.into_token_stream().into();
     }
+    panic!("`inherit` macro can be applied only to struct");
 }
