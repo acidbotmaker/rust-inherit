@@ -205,12 +205,40 @@ fn make_inheritance(parent_struct_names: &Vec<String>, child_ast: &DeriveInput, 
             }).into_token_stream().to_string();
 
             if let Ok(ast) = parse_str(&gen) {
-                let impl_gen = (quote! {
-                    impl #child_struct_name {
-                        #(#impls_to_implement),*
+
+                let mut all_func_sigs = Vec::new();
+
+                for impl_item in &impls_to_implement {
+                    if let ImplItem::Fn(func) = impl_item {
+                        let func_signature = &func.sig;
+                        // Add semicolon at the end
+                        let function_signature_string = func_signature.to_token_stream().to_string() + ";";
+                        let parsed_function_signature = parse_str::<ImplItem>(&function_signature_string).unwrap();
+                        all_func_sigs.push(parsed_function_signature);
+                    }
+                }
+
+                let custom_trait_name = format_ident!("CustomTraitFromForChild{}", child_struct_name);
+                let custom_trait_impl = (quote! {
+                    #[derive(Debug)]
+                    struct #child_struct_name {
+                        #(#new_struct_fields),*
+                    }
+
+                    trait #custom_trait_name {
+                        // Add semicolon at the end
+                        #(#all_func_sigs)*
+                    }
+
+                    impl #custom_trait_name for #child_struct_name {
+                        #(#impls_to_implement)*
                     }
                 }).into();
-                return (ast, Some(impl_gen));
+
+                // println!("Custom trait: {}", custom_trait_impl.to_string());
+
+                return (ast, Some(custom_trait_impl));
+                // return (ast, None);
             }
             
             panic!("Failed to parse generated code");
@@ -248,11 +276,11 @@ pub fn inherit(parent_struct_tokens: TokenStream, child_struct: TokenStream) -> 
         if let Some(child_impl) = child_impl {
             println!("Child impl: {}", child_impl.to_string());
             let mut combined_tokens = TokenStream::new();
-            combined_tokens.extend(inherited_child_struct_tokenstream);
-            combined_tokens.extend(child_impl);
+            // combined_tokens.extend(inherited_child_struct_tokenstream);
+            // combined_tokens.extend(child_impl);
 
             println!("Tokens: {}", combined_tokens.to_string());
-            return combined_tokens;
+            return child_impl;
         }        
         return inherited_child_struct_tokenstream;
     }

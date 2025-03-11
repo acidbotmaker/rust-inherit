@@ -48,10 +48,10 @@ struct Parallelogram {
 fn main() {
     let rect = Rectangle { x: 0, y: 0, width: 35, height: 45 };
     let sqr = Square {x: 0, y: 0, width: 35};
-    let par = Parallelogram { x: 0, y: 0, width: 35, height: 45, angle: 45, z: 45 };
+    let par = Parallelogram { x: 0, y: 0, width: 20, height: 45, angle: 45, z: 45 };
 
     println!("{:#?} {:#?} {:#?}", rect, sqr, par);
     println!("Area of sqr: {}", sqr.area());
-    // println!("Area of par: {}", par.area());
+    println!("Area of par: {}", par.area());
     println!("Area of rect: {}", rect.area());
 }
