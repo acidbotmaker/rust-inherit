@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
 use std::{collections::HashMap, fs};
-use syn::{self, parse_file, parse_str, Data, DataStruct, DeriveInput, File, Item, ItemStruct};
+use syn::{self, parse_file, parse_str, Data, DataStruct, DeriveInput, File, ImplItem, Item, ItemImpl, ItemStruct};
 
 const MAIN_FILE: &str = "src/main.rs";
 
@@ -22,6 +22,7 @@ fn item_struct_to_derive_input(item_struct: ItemStruct) -> DeriveInput {
 struct StructHashMapItem {
     code: DeriveInput,
     parents: Vec<String>,
+    impl_items: Vec<ImplItem>,
 }
 
 // NOTE: Cache it maybe?
@@ -32,12 +33,13 @@ fn load_all_struct_hashmap() -> HashMap<String, StructHashMapItem> {
     let ast: File = parse_file(&code).expect("Failed to parse file");
 
     let mut struct_hashmap: HashMap<String, StructHashMapItem> = HashMap::new();
-    for item in ast.items {
+    for item in &ast.items {
         if let Item::Struct(parsed_struct) = item {
             let struct_name = parsed_struct.ident.to_string();
             let mut item = StructHashMapItem{
                 code: item_struct_to_derive_input(parsed_struct.clone()),
                 parents: Vec::new(),
+                impl_items: Vec::new(),
             };
 
             // Check for parent here
@@ -57,6 +59,25 @@ fn load_all_struct_hashmap() -> HashMap<String, StructHashMapItem> {
             // Check if struct is already present in hashmap or not
             if !struct_hashmap.contains_key(&struct_name) {
                 struct_hashmap.insert(struct_name, item);
+            }
+        }
+    }
+
+    // Load all impls
+    for item in &ast.items {
+        if let Item::Impl(parsed_impl) = item {
+            if let syn::Type::Path(type_path) = &*parsed_impl.self_ty {
+                // Extract the last segment of the path, which is usually struct
+                if let Some(segment) = type_path.path.segments.last() {
+                    let struct_name = segment.ident.to_string();
+                    if struct_hashmap.contains_key(&struct_name) {
+                        let struct_to_mod = struct_hashmap.get_mut(&struct_name).unwrap();
+                        
+                        for item in &parsed_impl.items {
+                            struct_to_mod.impl_items.push(item.clone());
+                        }
+                    }
+                }
             }
         }
     }
