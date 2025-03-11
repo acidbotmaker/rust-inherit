@@ -1,9 +1,11 @@
 use proc_macro::TokenStream;
-use quote::{quote, ToTokens};
+use quote::{quote, ToTokens, format_ident};
 use std::{collections::HashMap, fs};
-use syn::{self, parse_file, parse_str, Data, DataStruct, DeriveInput, File, ImplItem, Item, ItemImpl, ItemStruct};
+use syn::{self, parse_file, parse_str, token::Token, Data, DataStruct, DeriveInput, File, ImplItem, Item, ItemImpl, ItemStruct};
 
 const MAIN_FILE: &str = "src/main.rs";
+
+type OptionalChildImpl = Option<TokenStream>;
 
 fn item_struct_to_derive_input(item_struct: ItemStruct) -> DeriveInput {
     DeriveInput {
@@ -94,7 +96,7 @@ fn load_all_struct_hashmap() -> HashMap<String, StructHashMapItem> {
     return struct_hashmap;
 }
 
-fn make_inheritance(parent_struct_names: &Vec<String>, child_ast: &DeriveInput, global_struct_hashmap: &HashMap<String, StructHashMapItem>) -> DeriveInput {
+fn make_inheritance(parent_struct_names: &Vec<String>, child_ast: &DeriveInput, global_struct_hashmap: &HashMap<String, StructHashMapItem>) -> (DeriveInput, OptionalChildImpl) {
     let child_struct_name = &child_ast.ident;
 
     let mut impls_to_implement: Vec<ImplItem> = Vec::new();
@@ -105,8 +107,8 @@ fn make_inheritance(parent_struct_names: &Vec<String>, child_ast: &DeriveInput, 
 
             // Check if parent has grandparent
             if parent_struct.parents.len() > 0 {
-                let ss = make_inheritance(&parent_struct.parents, &parent_struct.code, global_struct_hashmap);
-                parent_structs.push(ss);
+                let (mod_struct, _child_impl) =  make_inheritance(&parent_struct.parents, &parent_struct.code, global_struct_hashmap);
+                parent_structs.push(mod_struct);
             }
 
             for impl_item in &parent_struct.impl_items {
@@ -203,7 +205,12 @@ fn make_inheritance(parent_struct_names: &Vec<String>, child_ast: &DeriveInput, 
             }).into_token_stream().to_string();
 
             if let Ok(ast) = parse_str(&gen) {
-                return ast;
+                let impl_gen = (quote! {
+                    impl #child_struct_name {
+                        #(#impls_to_implement),*
+                    }
+                }).into();
+                return (ast, Some(impl_gen));
             }
             
             panic!("Failed to parse generated code");
@@ -234,10 +241,20 @@ pub fn inherit(parent_struct_tokens: TokenStream, child_struct: TokenStream) -> 
             }
         }
 
-        let inherited_child_struct = make_inheritance(&parent_struct_names, &child_ast, &global_struct_hashmap);
-
+        let (inherited_child_struct, child_impl) = make_inheritance(&parent_struct_names, &child_ast, &global_struct_hashmap);
         // Convert deriveInput to TokenStream
-        return inherited_child_struct.into_token_stream().into();
+        let inherited_child_struct_tokenstream = inherited_child_struct.into_token_stream().into();
+
+        if let Some(child_impl) = child_impl {
+            println!("Child impl: {}", child_impl.to_string());
+            let mut combined_tokens = TokenStream::new();
+            combined_tokens.extend(inherited_child_struct_tokenstream);
+            combined_tokens.extend(child_impl);
+
+            println!("Tokens: {}", combined_tokens.to_string());
+            return combined_tokens;
+        }        
+        return inherited_child_struct_tokenstream;
     }
     panic!("`inherit` macro can be applied only to struct");
 }
