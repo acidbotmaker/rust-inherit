@@ -19,6 +19,15 @@ fn item_struct_to_derive_input(item_struct: ItemStruct) -> DeriveInput {
     }
 }
 
+fn get_impl_s_item_name(item: &ImplItem) -> String {
+    match item {
+        ImplItem::Fn(method) => method.sig.ident.to_string(),
+        ImplItem::Const(const_item) => const_item.ident.to_string(),
+        ImplItem::Type(type_item) => type_item.ident.to_string(),
+        _ => panic!("Not implemented")
+    }
+}
+
 struct StructHashMapItem {
     code: DeriveInput,
     parents: Vec<String>,
