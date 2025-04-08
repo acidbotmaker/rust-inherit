@@ -106,32 +106,36 @@ fn make_inheritance(
     for parent_struct_name in parent_struct_names {
         if let Some(parent_struct) = global_struct_hashmap.get(parent_struct_name) {
             let mut mod_struct_w_impl: Option<TokenStream> = None;
-            // Check if parent has grandparent
+
+            // Check if parent has parent, i.e., if child has grandparent
             if parent_struct.parents.len() > 0 {
-                println!("\t{}---DEBUG--------------------------------------------------------------", parent_struct_name);
+                println!("\t{}-{}---GRANDPARENT CHECK--------------------------------------------------------------", child_struct_name, parent_struct_name);
                 let (mod_struct, _child_impl) = make_inheritance(
                     &parent_struct.parents,
                     &parent_struct.code,
                     global_struct_hashmap,
                 );
-                mod_struct_w_impl = _child_impl;
-                // println!("Rectangle class: {:#?}", &mod_struct.clone().into_token_stream().to_string());
-                // println!("\t{}---FINISHED--------------------------------------------------------------", parent_struct_name);
+                // mod_struct_w_impl = _child_impl;
+                // // println!("Rectangle class: {:#?}", &mod_struct.clone().into_token_stream().to_string());
+                println!("\t{}-{}---GRANDPARENT FINISHED--------------------------------------------------------------", child_struct_name, parent_struct_name);
                 parent_structs.push(mod_struct);
             }
 
+            // Load all impls of parent
             for impl_item in &parent_struct.impl_items {
                 // Get item name
                 let item_name = get_impl_s_item_name(impl_item);
+                
 
+                // TODO: Convert it into generic function
                 // Check if impl item already exists
                 let mut impl_item_index = 0;
                 let mut impl_item_exists = false;
 
                 for exiting_impl_item in &impls_to_implement {
-                    let existimg_impl_item_name = get_impl_s_item_name(exiting_impl_item);
+                    let existing_impl_item_name = get_impl_s_item_name(exiting_impl_item);
 
-                    if existimg_impl_item_name == item_name {
+                    if existing_impl_item_name == item_name {
                         impl_item_exists = true;
                         break;
                     }
@@ -146,9 +150,8 @@ fn make_inheritance(
                 }
             }
 
-            // TODO: Parse the incoming parent struct and pull methods from it as well
-
             parent_structs.push(parent_struct.code.clone());
+            // TODO: Parse the incoming parent struct and pull methods from it as well
         }
     }
 
@@ -156,6 +159,7 @@ fn make_inheritance(
         syn::Data::Struct(child) => {
             let mut new_struct_fields: Vec<syn::Field> = Vec::new();
 
+            // Load all fields (parent + child)
             for parent_ast in parent_structs {
                 match &parent_ast.data {
                     syn::Data::Struct(parent) => {
@@ -207,6 +211,7 @@ fn make_inheritance(
                 new_struct_fields.push(field.clone());
             }
 
+            // Field loading completed, now do impl
             // Load child impls
             let child_struct = global_struct_hashmap
                 .get(&child_struct_name.to_string())
