@@ -294,7 +294,7 @@ fn make_inheritance(
 pub fn inherit(parent_struct_tokens: TokenStream, child_struct: TokenStream) -> TokenStream {
     // Check the coming child_struct is a struct only
     if let Ok(child_ast) = syn::parse::<syn::DeriveInput>(child_struct) {
-        println!("{}---DEBUG--------------------------------------------------------------", child_ast.ident.to_string());
+        println!("{}---STARTED--------------------------------------------------------------", child_ast.ident.to_string());
         // Load global struct hashmap
         let global_struct_hashmap = load_all_struct_hashmap();
 
@@ -307,7 +307,8 @@ pub fn inherit(parent_struct_tokens: TokenStream, child_struct: TokenStream) -> 
         if parent_struct_names.len() == 0 {
             panic!("At least one parent struct must be specified");
         }
-
+        
+        // Check if passed parent struct definition is available or not
         for parent_struct_name in &parent_struct_names {
             if !global_struct_hashmap.contains_key(parent_struct_name) {
                 panic!(
@@ -317,8 +318,10 @@ pub fn inherit(parent_struct_tokens: TokenStream, child_struct: TokenStream) -> 
             }
         }
 
+        // Make inheritance here
         let (inherited_child_struct, child_impl) =
             make_inheritance(&parent_struct_names, &child_ast, &global_struct_hashmap);
+        
         // Convert deriveInput to TokenStream
         let inherited_child_struct_tokenstream = inherited_child_struct.into_token_stream().into();
         
