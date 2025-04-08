@@ -2,27 +2,19 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 use std::{collections::HashMap, fs};
 use syn::{
-    self, parse_file, parse_str, token::Token, Data, DataStruct, DeriveInput, File, ImplItem, Item,
-    ItemImpl, ItemStruct,
+    self, parse_file, parse_str, Data, DataStruct, DeriveInput, File, ImplItem, Item, ItemStruct,
 };
 
+
+// Declaring mods
+mod struct_utils;
+
+// Local imports
+use struct_utils::StructHashMapItem;
+
+// Constants
 const MAIN_FILE: &str = "src/main.rs";
-
 type OptionalChildImpl = Option<TokenStream>;
-
-fn item_struct_to_derive_input(item_struct: ItemStruct) -> DeriveInput {
-    DeriveInput {
-        attrs: item_struct.attrs,       // Preserve attributes
-        vis: item_struct.vis,           // Preserve visibility (pub/private)
-        ident: item_struct.ident,       // Struct name
-        generics: item_struct.generics, // Generic parameters
-        data: Data::Struct(DataStruct {
-            struct_token: item_struct.struct_token,
-            fields: item_struct.fields, // Fields of the struct
-            semi_token: item_struct.semi_token,
-        }),
-    }
-}
 
 fn get_impl_s_item_name(item: &ImplItem) -> String {
     match item {
@@ -33,10 +25,30 @@ fn get_impl_s_item_name(item: &ImplItem) -> String {
     }
 }
 
-struct StructHashMapItem {
-    code: DeriveInput,
-    parents: Vec<String>,
-    impl_items: Vec<ImplItem>,
+
+fn get_item_index_from_array(item: ImplItem, impls_to_implement: & Vec<ImplItem>) -> Option<usize> {
+    for (index, impl_item) in impls_to_implement.iter().enumerate() {
+        if get_impl_s_item_name(impl_item) == get_impl_s_item_name(&item) {
+            return Some(index);
+        }
+    }
+    return None;
+}
+
+fn load_impl_from_parents(parent_impls: &Vec<ImplItem>, impls_to_implement: &mut Vec<ImplItem>) {
+    for impl_item in parent_impls {
+        // Get item name
+        let item_name = get_impl_s_item_name(impl_item);
+
+        // Check if impl item already exists
+        let impl_item_index = get_item_index_from_array(impl_item.to_owned(), impls_to_implement);
+
+        if let Some(item_index) = impl_item_index {
+            impls_to_implement[item_index] = impl_item.clone();
+        }else{
+            &impls_to_implement.push(impl_item.clone());
+        }
+    }
 }
 
 // NOTE: Cache it maybe?
@@ -50,32 +62,8 @@ fn load_all_struct_hashmap() -> HashMap<String, StructHashMapItem> {
     for item in &ast.items {
         if let Item::Struct(parsed_struct) = item {
             let struct_name = parsed_struct.ident.to_string();
-            let mut item = StructHashMapItem {
-                code: item_struct_to_derive_input(parsed_struct.clone()),
-                parents: Vec::new(),
-                impl_items: Vec::new(),
-            };
-
-            // Check for parent here
-            let attrs = parsed_struct.attrs.clone();
-            for attr in attrs {
-                let meta = attr.meta;
-                if meta.path().is_ident("inherit") {
-                    let attribute = meta
-                        .to_token_stream()
-                        .to_string()
-                        .replace("inherit(", "")
-                        .replace(")", "");
-                    // println!("{} -> {}", parsed_struct.ident.to_string(), attribute);
-                    // Split by , and trim attribute
-                    let _ = attribute
-                        .split(',')
-                        .map(|s| item.parents.push(s.trim().to_string()))
-                        .collect::<Vec<_>>();
-                    break;
-                }
-            }
-
+            let item = StructHashMapItem::new(parsed_struct);
+            
             // Check if struct is already present in hashmap or not
             if !struct_hashmap.contains_key(&struct_name) {
                 struct_hashmap.insert(struct_name, item);
@@ -117,13 +105,18 @@ fn make_inheritance(
     let mut parent_structs = Vec::new();
     for parent_struct_name in parent_struct_names {
         if let Some(parent_struct) = global_struct_hashmap.get(parent_struct_name) {
+            let mut mod_struct_w_impl: Option<TokenStream> = None;
             // Check if parent has grandparent
             if parent_struct.parents.len() > 0 {
+                println!("\t{}---DEBUG--------------------------------------------------------------", parent_struct_name);
                 let (mod_struct, _child_impl) = make_inheritance(
                     &parent_struct.parents,
                     &parent_struct.code,
                     global_struct_hashmap,
                 );
+                mod_struct_w_impl = _child_impl;
+                // println!("Rectangle class: {:#?}", &mod_struct.clone().into_token_stream().to_string());
+                // println!("\t{}---FINISHED--------------------------------------------------------------", parent_struct_name);
                 parent_structs.push(mod_struct);
             }
 
@@ -152,6 +145,8 @@ fn make_inheritance(
                     impls_to_implement.push(impl_item.clone());
                 }
             }
+
+            // TODO: Parse the incoming parent struct and pull methods from it as well
 
             parent_structs.push(parent_struct.code.clone());
         }
@@ -284,11 +279,7 @@ fn make_inheritance(
                     }
                 })
                 .into();
-
-                // println!("Custom trait: {}", custom_trait_impl.to_string());
-
                 return (ast, Some(custom_trait_impl));
-                // return (ast, None);
             }
 
             panic!("Failed to parse generated code");
@@ -303,6 +294,7 @@ fn make_inheritance(
 pub fn inherit(parent_struct_tokens: TokenStream, child_struct: TokenStream) -> TokenStream {
     // Check the coming child_struct is a struct only
     if let Ok(child_ast) = syn::parse::<syn::DeriveInput>(child_struct) {
+        println!("{}---DEBUG--------------------------------------------------------------", child_ast.ident.to_string());
         // Load global struct hashmap
         let global_struct_hashmap = load_all_struct_hashmap();
 
@@ -329,14 +321,10 @@ pub fn inherit(parent_struct_tokens: TokenStream, child_struct: TokenStream) -> 
             make_inheritance(&parent_struct_names, &child_ast, &global_struct_hashmap);
         // Convert deriveInput to TokenStream
         let inherited_child_struct_tokenstream = inherited_child_struct.into_token_stream().into();
-
+        
+        
+        println!("{}---FINISHED--------------------------------------------------------------", child_ast.ident.to_string());
         if let Some(child_impl) = child_impl {
-            println!("Child impl: {}", child_impl.to_string());
-            let mut combined_tokens = TokenStream::new();
-            // combined_tokens.extend(inherited_child_struct_tokenstream);
-            // combined_tokens.extend(child_impl);
-
-            println!("Tokens: {}", combined_tokens.to_string());
             return child_impl;
         }
         return inherited_child_struct_tokenstream;
