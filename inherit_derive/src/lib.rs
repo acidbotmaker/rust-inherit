@@ -2,54 +2,21 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 use std::{collections::HashMap, fs};
 use syn::{
-    self, parse_file, parse_str, Data, DataStruct, DeriveInput, File, ImplItem, Item, ItemStruct,
+    self, parse_file, parse_str, DeriveInput, File, ImplItem, Item,
 };
 
 
 // Declaring mods
-mod struct_utils;
+mod struct_;
+mod utils;
 
 // Local imports
-use struct_utils::StructHashMapItem;
+use struct_::StructHashMapItem;
+use utils::{get_impl_s_item_name, get_struct_field_name, merge_old_array_in_new_array};
 
 // Constants
 const MAIN_FILE: &str = "src/main.rs";
 type OptionalChildImpl = Option<TokenStream>;
-
-fn get_impl_s_item_name(item: &ImplItem) -> String {
-    match item {
-        ImplItem::Fn(method) => method.sig.ident.to_string(),
-        ImplItem::Const(const_item) => const_item.ident.to_string(),
-        ImplItem::Type(type_item) => type_item.ident.to_string(),
-        _ => panic!("Not implemented"),
-    }
-}
-
-
-fn get_item_index_from_array(item: ImplItem, impls_to_implement: & Vec<ImplItem>) -> Option<usize> {
-    for (index, impl_item) in impls_to_implement.iter().enumerate() {
-        if get_impl_s_item_name(impl_item) == get_impl_s_item_name(&item) {
-            return Some(index);
-        }
-    }
-    return None;
-}
-
-fn load_impl_from_parents(parent_impls: &Vec<ImplItem>, impls_to_implement: &mut Vec<ImplItem>) {
-    for impl_item in parent_impls {
-        // Get item name
-        let item_name = get_impl_s_item_name(impl_item);
-
-        // Check if impl item already exists
-        let impl_item_index = get_item_index_from_array(impl_item.to_owned(), impls_to_implement);
-
-        if let Some(item_index) = impl_item_index {
-            impls_to_implement[item_index] = impl_item.clone();
-        }else{
-            &impls_to_implement.push(impl_item.clone());
-        }
-    }
-}
 
 // NOTE: Cache it maybe?
 fn load_all_struct_hashmap() -> HashMap<String, StructHashMapItem> {
@@ -122,33 +89,7 @@ fn make_inheritance(
             }
 
             // Load all impls of parent
-            for impl_item in &parent_struct.impl_items {
-                // Get item name
-                let item_name = get_impl_s_item_name(impl_item);
-                
-
-                // TODO: Convert it into generic function
-                // Check if impl item already exists
-                let mut impl_item_index = 0;
-                let mut impl_item_exists = false;
-
-                for exiting_impl_item in &impls_to_implement {
-                    let existing_impl_item_name = get_impl_s_item_name(exiting_impl_item);
-
-                    if existing_impl_item_name == item_name {
-                        impl_item_exists = true;
-                        break;
-                    }
-                    impl_item_index += 1;
-                }
-
-                // Then add it
-                if impl_item_exists {
-                    impls_to_implement[impl_item_index] = impl_item.clone();
-                } else {
-                    impls_to_implement.push(impl_item.clone());
-                }
-            }
+            impls_to_implement = merge_old_array_in_new_array(impls_to_implement, &parent_struct.impl_items, get_impl_s_item_name);
 
             parent_structs.push(parent_struct.code.clone());
             // TODO: Parse the incoming parent struct and pull methods from it as well
@@ -163,85 +104,23 @@ fn make_inheritance(
             for parent_ast in parent_structs {
                 match &parent_ast.data {
                     syn::Data::Struct(parent) => {
-                        // Loop through parent fields
-                        for field in parent.fields.iter() {
-                            // Check if field already exists in new_struct_fields
-                            let mut field_index = 0;
-                            let mut change_field = false;
-                            for new_field in new_struct_fields.iter() {
-                                if field.ident == new_field.ident {
-                                    change_field = true;
-                                    break;
-                                }
-                                field_index += 1;
-                            }
-
-                            // Remove it
-                            if change_field {
-                                new_struct_fields.remove(field_index);
-                            }
-
-                            // Then add parent's
-                            new_struct_fields.push(field.clone());
-                        }
+                        new_struct_fields = merge_old_array_in_new_array(new_struct_fields, &parent.fields.iter().map(|x| x.clone()).collect(), get_struct_field_name);
                     }
                     _ => panic!("Not implemented inheritance"),
                 }
             }
 
             // Loop through child fields
-            for field in child.fields.iter() {
-                // Check if field already exists in new_struct_fields
-                let mut field_index = 0;
-                let mut change_field = false;
-                for new_field in new_struct_fields.iter() {
-                    if field.ident == new_field.ident {
-                        change_field = true;
-                        break;
-                    }
-                    field_index += 1;
-                }
-
-                // Remove it
-                if change_field {
-                    new_struct_fields.remove(field_index);
-                }
-
-                // Then add parent's
-                new_struct_fields.push(field.clone());
-            }
+            new_struct_fields = merge_old_array_in_new_array(new_struct_fields, &child.fields.iter().map(|x| x.clone()).collect(), get_struct_field_name);
 
             // Field loading completed, now do impl
             // Load child impls
             let child_struct = global_struct_hashmap
                 .get(&child_struct_name.to_string())
                 .unwrap();
-            for impl_item in &child_struct.impl_items {
-                // Get item name
-                let item_name = get_impl_s_item_name(impl_item);
-
-                // Check if impl item already exists
-                let mut impl_item_index = 0;
-                let mut impl_item_exists = false;
-
-                for exiting_impl_item in &impls_to_implement {
-                    let existimg_impl_item_name = get_impl_s_item_name(exiting_impl_item);
-
-                    if existimg_impl_item_name == item_name {
-                        impl_item_exists = true;
-                        break;
-                    }
-                    impl_item_index += 1;
-                }
-
-                // Then add it
-                if impl_item_exists {
-                    impls_to_implement[impl_item_index] = impl_item.clone();
-                } else {
-                    impls_to_implement.push(impl_item.clone());
-                }
-            }
-
+            impls_to_implement = merge_old_array_in_new_array(impls_to_implement, &child_struct.impl_items, get_impl_s_item_name);
+            
+            // Code generation starts here
             let gen = (quote! {
                 #[derive(Debug)]
                 struct #child_struct_name {
