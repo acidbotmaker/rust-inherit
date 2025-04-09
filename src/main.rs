@@ -6,7 +6,8 @@ struct Shape {
 }
 
 impl Shape {
-    fn area() -> u32 {
+    fn area(self: &Self) -> u32 {
+        println!("\t\t|Area of shape called|");
         0
     }
 }
@@ -16,16 +17,9 @@ struct _3DShape {
 }
 
 #[inherit(Shape)]
-#[derive(Debug)]
 struct Rectangle{
     width: u32,
     height: u32,
-}
-
-impl Rectangle {
-    fn area(&self) -> u32 {
-        return self.width * self.height;
-    }
 }
 
 #[inherit(Shape)]
@@ -35,6 +29,7 @@ struct Square {
 
 impl Square {
     fn area(&self) -> u32 {
+        println!("\t\t|Area of square called|");
         return self.width * self.width;
     }
 }
@@ -48,9 +43,9 @@ struct Parallelogram {
 fn main() {
     let rect = Rectangle { x: 0, y: 0, width: 35, height: 45 };
     let sqr = Square {x: 0, y: 0, width: 35};
-    let par = Parallelogram { x: 0, y: 0, width: 20, height: 45, angle: 45, z: 45 };
+    let par = Parallelogram { x: 0, y: 0, z: 45, width: 20, height: 45, angle: 45 };
 
-    println!("{:#?} {:#?} {:#?}", rect, sqr, par);
+    // println!("{:#?} {:#?} {:#?}", rect, sqr, par);
     println!("Area of sqr: {}", sqr.area());
     println!("Area of par: {}", par.area());
     println!("Area of rect: {}", rect.area());
