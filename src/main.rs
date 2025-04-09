@@ -22,6 +22,13 @@ struct Rectangle{
     height: u32,
 }
 
+impl Rectangle {
+    fn area(&self) -> u32 {
+        println!("\t\t|Area of rectangle called|");
+        return self.width * self.height;
+    }
+}
+
 #[inherit(Shape)]
 struct Square {
     width: u32,
@@ -34,7 +41,7 @@ impl Square {
     }
 }
 
-#[inherit(Rectangle, _3DShape)] // Multi-level inheritance is pending
+#[inherit(Rectangle, _3DShape)]
 struct Parallelogram {
     angle: u32
 }
